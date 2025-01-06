@@ -22,8 +22,9 @@ public class Product {
     private String pDescription;
 
 
-    public Product(int iRef, String vID) {
-        this.refid=iRef;
+//    public Product(int iRef, String vID) {
+public Product(String vID) {
+//        this.refid=iRef;
         this.id=vID;
     }//constructor
 
