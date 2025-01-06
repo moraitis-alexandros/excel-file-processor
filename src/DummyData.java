@@ -43,12 +43,12 @@ public class DummyData {
 
 // Stock units per product
         this.stockUnitsPerProduct = new HashMap<>();
-        stockUnitsPerProduct.put("Product1", 75);
-        stockUnitsPerProduct.put("Product2", 120);
-        stockUnitsPerProduct.put("Product3", 50);
-        stockUnitsPerProduct.put("Product4", 90);
+        stockUnitsPerProduct.put("Product1", 95);
+        stockUnitsPerProduct.put("Product2", 160);
+        stockUnitsPerProduct.put("Product3", 80);
+        stockUnitsPerProduct.put("Product4", 115);
         stockUnitsPerProduct.put("Product5", 100);
-        stockUnitsPerProduct.put("Product6", 80);
+        stockUnitsPerProduct.put("Product6", 105);
         stockUnitsPerProduct.put("Product7", 110);
         stockUnitsPerProduct.put("Product8", 60);
 
