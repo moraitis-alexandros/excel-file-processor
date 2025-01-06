@@ -2,7 +2,6 @@ import AutostoreParameters.Product;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -44,7 +43,7 @@ public class FileExtractor {
     Sheet sheet1;
     Sheet sheet2;
     int colLastActive;
-    Boolean willSort;
+    Boolean removeUnsortedSheet;
     Row rowSorted;
     Row row;
     Cell cell;
@@ -52,7 +51,7 @@ public class FileExtractor {
     public FileExtractor(ArrayList<Product> pProductList,
                          HashMap<String, Integer> stockUnitsPerProduct,
                          ArrayList<HashMap<String, Integer>> stockUnitsPerBinType,
-                         ArrayList<HashMap<String, Integer>> nBinsPerBinType, String outPath, Boolean willSort
+                         ArrayList<HashMap<String, Integer>> nBinsPerBinType, String outPath, Boolean removeUnsortedSheet
                          ) {
 
         this.pProductList = pProductList;
@@ -66,12 +65,16 @@ public class FileExtractor {
         this.sheet1 = wb.createSheet("Data Sheet");
         //create a sheet2 for sorted data
         this.sheet2= wb.createSheet("Sorted Data Sheet");
-        this.willSort = willSort;
+        this.removeUnsortedSheet = removeUnsortedSheet;
     }//fileExtractor constructor
 
 
+    /**
+     * It executes the extraction. Check if bin types already exist in binTypes ArrayList.
+     * If it find that something does not exists it adds it.
+     * Then it makes another pass to add the data to the corresponding bins
+     */
     public void executeExtraction(){
-
         try (OutputStream fileOut = new FileOutputStream(outPath)) {
             //Create Headings
             Row row = sheet1.createRow(0);
@@ -148,12 +151,20 @@ public class FileExtractor {
 
             sortData();
             replaceZerosWithNulls(sheet2);
+            //Applies product total quantity to the sheets
+            addProductStockQuantityColumn(sheet1);
+            addProductStockQuantityColumn(sheet2);
             autoSizeSheetColumns();
+
+
             //removes the first sheet with unsorted data.
-            wb.removeSheetAt(0);
+            if (removeUnsortedSheet) {
+                wb.removeSheetAt(0);
+            }
             wb.write(fileOut);
+            System.out.println("The extraction completed successfully");
         } catch (IOException e) {
-            System.out.println("Not correct path provided");
+            System.out.println("There was an error to the extraction! Not correct path provided");
             throw new RuntimeException(e);
         }
     }//executeExtraction
@@ -180,48 +191,10 @@ public class FileExtractor {
 //                System.out.println("col "+j);
                 row = sheet1.getRow(0);
                 Cell cellB = row.getCell(j);
-
                 //Sort QBins
                 if (cellA.getStringCellValue().charAt(0) == 'Q' && cellB.getStringCellValue().charAt(0) == 'Q') {
-                    int cellNumberA = Integer.parseInt(cellA.getStringCellValue().substring(9));
-                    int cellNumberB = Integer.parseInt(cellB.getStringCellValue().substring(9));
-
-                    if (cellNumberA > cellNumberB) {
-//                        System.out.println("Transposing Q"+cellNumberA+" with "+cellNumberB);
-                        String temp = cellA.getStringCellValue();
-                        cellA.setCellValue(cellB.getStringCellValue());
-                        cellB.setCellValue(temp);
-
-                        //Also change the columns
-                        for (int p = 1; p <= pProductList.size(); p++) {
-                            row = sheet1.getRow(p);
-
-                            // Ensure cells exist before accessing their values
-                            Cell cellI = row.getCell(i);
-                            Cell cellJ = row.getCell(j);
-
-                            if (cellI == null && cellJ != null) {
-                                // Create cellI and copy value from cellJ
-                                cellI = row.createCell(i);
-                                cellI.setCellValue(cellJ.getNumericCellValue());
-                                cellJ.setCellValue(0); // Clear numeric value in cellJ
-                            } else if (cellJ == null && cellI != null) {
-                                // Create cellJ and copy value from cellI
-                                cellJ = row.createCell(j);
-                                cellJ.setCellValue(cellI.getNumericCellValue());
-                                cellI.setCellValue(0); // Clear numeric value in cellI
-                            } else if (cellI != null && cellJ != null) {
-                                // Swap values between cellI and cellJ
-                                double temp2 = cellI.getNumericCellValue();
-                                cellI.setCellValue(cellJ.getNumericCellValue());
-                                cellJ.setCellValue(temp2);
-                            }
-                            // If both cells are null, nothing to do for this row
-                        }
-
-                    }//if
+                    transpose(cellA, cellB, i, j);
                 }
-
             }//inner loop
         }//outer loop
 
@@ -237,45 +210,8 @@ public class FileExtractor {
                 row = sheet1.getRow(0);
                 Cell cellB = row.getCell(j);
                 if (cellA.getStringCellValue().charAt(0) == 'N' && cellB.getStringCellValue().charAt(0) == 'N') {
-                    int cellNumberA = Integer.parseInt(cellA.getStringCellValue().substring(9));
-                    int cellNumberB = Integer.parseInt(cellB.getStringCellValue().substring(9));
-
-                    if (cellNumberA > cellNumberB) {
-//                        System.out.println("Transposing N"+cellNumberA+" with "+cellNumberB);
-                        String temp = cellA.getStringCellValue();
-                        cellA.setCellValue(cellB.getStringCellValue());
-                        cellB.setCellValue(temp);
-
-                        //Also change the columns
-                        for (int p = 1; p <= pProductList.size(); p++) {
-                            row = sheet1.getRow(p);
-
-                            // Ensure cells exist before accessing their values
-                            Cell cellI = row.getCell(i);
-                            Cell cellJ = row.getCell(j);
-
-                            if (cellI == null && cellJ != null) {
-                                // Create cellI and copy value from cellJ
-                                cellI = row.createCell(i);
-                                cellI.setCellValue(cellJ.getNumericCellValue());
-                                cellJ.setCellValue(0); // Clear numeric value in cellJ
-                            } else if (cellJ == null && cellI != null) {
-                                // Create cellJ and copy value from cellI
-                                cellJ = row.createCell(j);
-                                cellJ.setCellValue(cellI.getNumericCellValue());
-                                cellI.setCellValue(0); // Clear numeric value in cellI
-                            } else if (cellI != null && cellJ != null) {
-                                // Swap values between cellI and cellJ
-                                double temp2 = cellI.getNumericCellValue();
-                                cellI.setCellValue(cellJ.getNumericCellValue());
-                                cellJ.setCellValue(temp2);
-                            }
-                            // If both cells are null, nothing to do for this row
-                        }
-
-                    }//if
+                    transpose(cellA, cellB, i, j);
                 }
-
             }//inner loop
         }//outer loop
 
@@ -325,11 +261,25 @@ public class FileExtractor {
     }//sortData
 
     /**
+     * Applies the product stock quantity column to the specified sheet
+     */
+    public void addProductStockQuantityColumn(Sheet sheet) {
+            row = sheet.getRow(0);
+            row.createCell(colLastActive).setCellValue("Total Quantity");
+        for (int i = 1; i <= pProductList.size(); i++) {
+            row = sheet.getRow(i);
+            String id = row.getCell(0).getStringCellValue();
+            cell = row.createCell(colLastActive);
+            int stockUnits = stockUnitsPerProduct.get(id);
+            cell.setCellValue(stockUnits);
+        }
+    }//addProductStockQuantityColumn
+
+    /**
      * Resizes the width of columns of the created sheets to fit into contents width
      */
     public void autoSizeSheetColumns() {
         for (int i= 0; i <= colLastActive; i++) {
-            System.out.println("iter"+i);
             sheet1.autoSizeColumn(i); //adjust width of the i column
             sheet2.autoSizeColumn(i);
         }
@@ -397,5 +347,47 @@ public class FileExtractor {
         }
     }//printExtractedData
 
+    /**
+     * It makes transpose between cells for entire columns
+     */
+    public void transpose(Cell cellA, Cell cellB, int i, int j) {
+        int cellNumberA = Integer.parseInt(cellA.getStringCellValue().substring(9));
+        int cellNumberB = Integer.parseInt(cellB.getStringCellValue().substring(9));
+
+        if (cellNumberA > cellNumberB) {
+//                        System.out.println("Transposing N"+cellNumberA+" with "+cellNumberB);
+            String temp = cellA.getStringCellValue();
+            cellA.setCellValue(cellB.getStringCellValue());
+            cellB.setCellValue(temp);
+
+            //Also change the columns
+            for (int p = 1; p <= pProductList.size(); p++) {
+                row = sheet1.getRow(p);
+
+                // Ensure cells exist before accessing their values
+                Cell cellI = row.getCell(i);
+                Cell cellJ = row.getCell(j);
+
+                if (cellI == null && cellJ != null) {
+                    // Create cellI and copy value from cellJ
+                    cellI = row.createCell(i);
+                    cellI.setCellValue(cellJ.getNumericCellValue());
+                    cellJ.setCellValue(0); // Clear numeric value in cellJ
+                } else if (cellJ == null && cellI != null) {
+                    // Create cellJ and copy value from cellI
+                    cellJ = row.createCell(j);
+                    cellJ.setCellValue(cellI.getNumericCellValue());
+                    cellI.setCellValue(0); // Clear numeric value in cellI
+                } else if (cellI != null && cellJ != null) {
+                    // Swap values between cellI and cellJ
+                    double temp2 = cellI.getNumericCellValue();
+                    cellI.setCellValue(cellJ.getNumericCellValue());
+                    cellJ.setCellValue(temp2);
+                }
+                // If both cells are null, nothing to do for this row
+            }
+
+        }//if
+    }
 
 }//class
