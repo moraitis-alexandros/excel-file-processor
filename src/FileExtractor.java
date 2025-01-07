@@ -2,12 +2,11 @@ import AutostoreParameters.Product;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Set;
+import java.util.*;
 
 /**
  * It extracts data to an excel workbook. The workbook may containe 2 sheets (Data Sheet & Sorted Data Sheet).
@@ -41,10 +40,7 @@ public class FileExtractor {
     private final String outPath;
     CreationHelper creationHelper ;
     Sheet sheet1;
-    Sheet sheet2;
     int colLastActive;
-    Boolean removeUnsortedSheet;
-    Row rowSorted;
     Row row;
     Cell cell;
 
@@ -63,104 +59,18 @@ public class FileExtractor {
         this.wb = new XSSFWorkbook();
         creationHelper = wb.getCreationHelper();
         this.sheet1 = wb.createSheet("Data Sheet");
-        //create a sheet2 for sorted data
-        this.sheet2= wb.createSheet("Sorted Data Sheet");
-        this.removeUnsortedSheet = removeUnsortedSheet;
     }//fileExtractor constructor
 
 
     /**
-     * It executes the extraction. Check if bin types already exist in binTypes ArrayList.
-     * If it find that something does not exists it adds it.
-     * Then it makes another pass to add the data to the corresponding bins
+     * It executes the extraction.
      */
     public void executeExtraction(){
         try (OutputStream fileOut = new FileOutputStream(outPath)) {
-            //Create Headings
-            Row row = sheet1.createRow(0);
-            Cell cell = row.createCell(0);
-            cell.setCellValue("Product ID");
-
-            //Create Heading for sorted data sheet
-            Row rowSorted = sheet2.createRow(0);
-            Cell cellSorted = rowSorted.createCell(0);
-            cellSorted.setCellValue("Product ID");
-
-
-             int rowIterator = 1;
-             colLastActive = 1;
-            for (Product product : pProductList) {
-                row = sheet1.createRow(rowIterator);
-                cell = row.createCell(0);
-                String productId = product.getProductID();;
-                cell.setCellValue(productId);
-                //For sorted data sheet
-                rowSorted = sheet2.createRow(rowIterator);
-                cellSorted = rowSorted.createCell(0);
-                cellSorted.setCellValue(productId);
-                HashMap<String, Integer> q = stockUnitsPerBinType.get(rowIterator-1);
-                Set<String> qKeys = q.keySet();
-                //Check if bin types already exist in binTypes ArrayList.
-                //If it find that something does not exists it adds it.
-                //Then it makes another pass to add the data to the corresponding bins
-                for (String key : qKeys) {
-                    if (!qBinExists(key)) {
-                        binTypes.add("Q_"+key);
-                        row = sheet1.getRow(0);
-                        cell = row.createCell(colLastActive);
-                        cell.setCellValue("Q_"+key);
-                        row = sheet1.getRow(rowIterator);
-                        cell = row.createCell(colLastActive);
-                        cell.setCellValue(q.get(key));
-                        colLastActive++;
-                    }
-                }
-                for (String key : qKeys) {
-                    if (qBinExists(key)) {
-                        int index = binTypes.indexOf("Q_"+key) + 1;
-                        row = sheet1.getRow(rowIterator);
-                        cell = row.createCell(index);
-                        cell.setCellValue(q.get(key));
-                    }
-                }
-//                Create Bins per Bin Type Columns
-                HashMap<String, Integer> n = nBinsPerBinType.get(rowIterator-1);
-                Set<String> nKeys = n.keySet();
-                for (String key : nKeys) {
-                    if (!nBinExists(key)) {
-                        binTypes.add("N_"+key);
-                        row = sheet1.getRow(0);
-                        cell = row.createCell(colLastActive);
-                        cell.setCellValue("N_"+key);
-                        row = sheet1.getRow(rowIterator);
-                        cell = row.createCell(colLastActive);
-                        cell.setCellValue(n.get(key));
-                        colLastActive++;
-                    }
-                }
-                for (String key : nKeys) {
-                    if (nBinExists(key)) {
-                        int index = binTypes.indexOf("N_"+key) + 1;
-                        row = sheet1.getRow(rowIterator);
-                        cell = row.createCell(index);
-                        cell.setCellValue(n.get(key));
-                    }
-                }
-                rowIterator++;
-            }
-
-            sortData();
-            replaceZerosWithNulls(sheet2);
-            //Applies product total quantity to the sheets
+            addHeadingsIntoSortedSheet();
+            populateSpreadsheet();
             addProductStockQuantityColumn(sheet1);
-            addProductStockQuantityColumn(sheet2);
             autoSizeSheetColumns();
-
-
-            //removes the first sheet with unsorted data.
-            if (removeUnsortedSheet) {
-                wb.removeSheetAt(0);
-            }
             wb.write(fileOut);
             System.out.println("The extraction completed successfully");
         } catch (IOException e) {
@@ -169,107 +79,128 @@ public class FileExtractor {
         }
     }//executeExtraction
 
+    /**
+     * It populates the spreadsheet based on headings. It iterates on each product corresponding hashmap.
+     * If it belongs in stockUnitsPerBinType array (i.e need "Q_Type) then it assigns value to the cell that its heading substring
+     * is equal with the hash value key. Otherwise if it belongs to nBinsPerBinType array (i.e need "N_Type) it makes
+     * a similar assignement
+     */
+    public void populateSpreadsheet() {
+        //Populate spreadsheet based on values
+        int rowIterator = 1;
+        for (int i =0; i < pProductList.size(); i++) {
+            //Make the first column with the product id
+            row = sheet1.createRow(rowIterator);
+            cell = row.createCell(0);
+            String productId = pProductList.get(i).getProductID();;
+            cell.setCellValue(productId);
+
+
+            HashMap<String, Integer> q = stockUnitsPerBinType.get(i);
+            Set<String> qKeys = q.keySet();
+
+            for (String key : qKeys) {
+                int index = 0;
+                for (int j = 1; j <= colLastActive; j++) {
+                    row = sheet1.getRow(0);
+                    if ((Integer.parseInt(key.substring(7)) == Integer.parseInt(row.getCell(j).getStringCellValue().substring(9)))
+                            && (row.getCell(j).getStringCellValue().charAt(0) == 'Q'))
+                    {
+                        index = j;
+                        break;
+                    }
+
+                }
+                row = sheet1.getRow(rowIterator);
+                row.createCell(index).setCellValue(q.get(key));
+            }
+
+            HashMap<String, Integer> s = nBinsPerBinType.get(i);
+            Set<String> sKeys = s.keySet();
+
+            for (String key : sKeys) {
+                int index = 0;
+                for (int j = 1; j <= colLastActive; j++) {
+                    row = sheet1.getRow(0);
+                    if ((Integer.parseInt(key.substring(7)) == Integer.parseInt(row.getCell(j).getStringCellValue().substring(9)))
+                            && (row.getCell(j).getStringCellValue().charAt(0) == 'N'))
+                    {
+                        index = j;
+                        break;
+                    }
+
+                }
+                row = sheet1.getRow(rowIterator);
+                row.createCell(index).setCellValue(s.get(key));
+            }
+
+            rowIterator++;
+        }
+    }//populateSpreadsheet
 
     /**
-     * Sorting into a separate sheet (Sorted Data Sheet) the columns of the original data sheet (Data Sheet)
-     * i.e. col Q_type1 will be next to col N_type1 and so on.
-     * IMPORTANT the name of the bins must have EXACTLY the name format that was provided in the description document:
-     * Q_BinType{x}, N_BinType{x} (i.e. Q_BinType1, N_BinType1) where x is an integer otherwise sortData function
-     * will lead to an exception
-     * The function firstly sorts the Qbins  and secondly the Nbins in ascending order using a selection sort
-     * algorithm based on the substring x, of BinType{x}
-     * After sorting it starts populating Sorted Data Sheet by placing Qbins in even columns and Nbins in odd columns
-     * accordingly.
+     * It creates the headings based on bin Types. At first all products and their corresponding
+     * hashmaps are seached for unique values. The unique values BinType{x} are added to binTypes array
+     * After the array is sorted based on a comparator. Then the headings are populated from column 1 till end
+     * in a way that even columns correspond to Q_Type{x} and odd columns correspond to N_Type{x}.
      */
-    public void sortData() {
-        int sortingLastCol = colLastActive - 1;
-        for (int i = 1; i <= sortingLastCol - 1; i++ ) {
+    public void addHeadingsIntoSortedSheet() {
+        //Create Headings
+        Row row = sheet1.createRow(0);
+        Cell cell = row.createCell(0);
+        cell.setCellValue("Product ID");
 
-            row = sheet1.getRow(0);
-            Cell cellA =row.getCell(i);
-            for (int j = i + 1; j <= sortingLastCol; j++) {
-//                System.out.println("col "+j);
-                row = sheet1.getRow(0);
-                Cell cellB = row.getCell(j);
-                //Sort QBins
-                if (cellA.getStringCellValue().charAt(0) == 'Q' && cellB.getStringCellValue().charAt(0) == 'Q') {
-                    transpose(cellA, cellB, i, j);
+
+
+        //iterate for finding the unique keys
+        for (int i = 1; i < pProductList.size(); i++) {
+            HashMap<String,Integer> j = stockUnitsPerBinType.get(i);
+            Set<String> jKeys = j.keySet();
+            for (String key : jKeys) {
+                if (!binExists(key)) {
+                    binTypes.add(key);
                 }
-            }//inner loop
-        }//outer loop
-
-
-
-        //Sort NBins
-        sortingLastCol = colLastActive - 1;
-        for (int i = 1; i <= sortingLastCol - 1; i++ ) {
-            row = sheet1.getRow(0);
-            Cell cellA =row.getCell(i);
-//            System.out.println(cellA.getStringCellValue());
-            for (int j = i + 1; j <= sortingLastCol; j++) {
-                row = sheet1.getRow(0);
-                Cell cellB = row.getCell(j);
-                if (cellA.getStringCellValue().charAt(0) == 'N' && cellB.getStringCellValue().charAt(0) == 'N') {
-                    transpose(cellA, cellB, i, j);
-                }
-            }//inner loop
-        }//outer loop
-
-
-        //Start checking sheet1
-        int sheet2IndexQ = 1;
-        int sheet2IndexN = 2;
-        sortingLastCol = colLastActive - 1;
-        for (int i = 1; i <= sortingLastCol; i++ ) {
-            row = sheet1.getRow(0);
-
-            //Starts placing Qbins in even columns
-            Cell cellA = row.getCell(i);
-            if (cellA.getStringCellValue().charAt(0) == 'Q') {
-                //start populating col
-                rowSorted = sheet2.getRow(0);
-                rowSorted.createCell(sheet2IndexQ).setCellValue(cellA.getStringCellValue());
-
-                for  (int p = 1; p <= pProductList.size(); p++) {
-                    rowSorted = sheet2.getRow(p);
-                    cell = sheet1.getRow(p).getCell(i);
-                    if (cell != null) {
-                        rowSorted.createCell(sheet2IndexQ).setCellValue(cell.getNumericCellValue());
-                    }
-                }
-                sheet2IndexQ = sheet2IndexQ+2;
-            }//if
-
-            //Starts placing Nbins in odd columns
-            if (cellA.getStringCellValue().charAt(0) == 'N') {
-                //start populating col
-                rowSorted = sheet2.getRow(0);
-                rowSorted.createCell(sheet2IndexN).setCellValue(cellA.getStringCellValue());
-
-                for  (int p = 1; p <= pProductList.size(); p++) {
-                    rowSorted = sheet2.getRow(p);
-                    cell = sheet1.getRow(p).getCell(i);
-                    if (cell != null) {
-                        rowSorted.createCell(sheet2IndexN).setCellValue(cell.getNumericCellValue());
-                    }
-                }
-                sheet2IndexN = sheet2IndexN+2;
-            }//if
-
+            }
         }
 
-    }//sortData
+
+        //order binType
+        Collections.sort(binTypes, new Comparator<String>() {
+            @Override
+            public int compare(String o1, String o2) {
+                int num1 = Integer.parseInt(o1.substring(7));
+                int num2 = Integer.parseInt(o2.substring(7));
+                return Integer.compare(num1, num2);
+            }
+        });
+
+        System.out.println("Found all bin types and sorted them sucessfully");
+        //Create headings based on the binTypes sorted list
+        row = sheet1.getRow(0);
+        //Populate Q & N
+        int binIndexQ = 1;
+        int binIndexN = 2;
+        for (int i = 0; i < binTypes.size(); i++) {
+            row.createCell(binIndexQ).setCellValue("Q_"+binTypes.get(i));
+            row.createCell(binIndexN).setCellValue("N_"+binTypes.get(i));
+            binIndexQ = binIndexQ + 2;
+            binIndexN = binIndexN + 2;
+        }
+
+        //find the last active col in sheet
+        colLastActive = binIndexN - 2;
+    }//addHeadingsIntoSortedSheet
 
     /**
      * Applies the product stock quantity column to the specified sheet
      */
     public void addProductStockQuantityColumn(Sheet sheet) {
             row = sheet.getRow(0);
-            row.createCell(colLastActive).setCellValue("Total Quantity");
+            row.createCell(colLastActive + 1).setCellValue("Total Quantity");
         for (int i = 1; i <= pProductList.size(); i++) {
             row = sheet.getRow(i);
             String id = row.getCell(0).getStringCellValue();
-            cell = row.createCell(colLastActive);
+            cell = row.createCell(colLastActive + 1);
             int stockUnits = stockUnitsPerProduct.get(id);
             cell.setCellValue(stockUnits);
         }
@@ -279,42 +210,16 @@ public class FileExtractor {
      * Resizes the width of columns of the created sheets to fit into contents width
      */
     public void autoSizeSheetColumns() {
-        for (int i= 0; i <= colLastActive; i++) {
+        for (int i= 0; i <= colLastActive + 1; i++) {
             sheet1.autoSizeColumn(i); //adjust width of the i column
-            sheet2.autoSizeColumn(i);
         }
     }//autoSizeSheetColumns
 
     /**
-     * It replaces the zero values of the sheet in null, for better readability
+     * Check if the bin exists in binTypesArray
      */
-    public void replaceZerosWithNulls(Sheet sheet) {
-        for (Row row1 : sheet) {
-            for (Cell cell1 : row1) {
-                if (cell1 != null) {
-                    // Check if the cell is numeric
-                    if (cell1.getCellType() == CellType.NUMERIC) {
-                        if (cell1.getNumericCellValue() == 0) {
-                            cell1.setCellValue(""); // Replace numeric 0 with an empty string
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Check if the Qbin exists in BinTypesArray
-     */
-    public boolean qBinExists(String bin) {
-        return binTypes.contains("Q_"+bin);
-    }
-
-    /**
-     * Check if the Nbin exists in BinTypesArray
-     */
-    public boolean nBinExists(String bin) {
-        return binTypes.contains("N_"+bin);
+    public boolean binExists(String bin) {
+        return binTypes.contains(bin);
     }
 
     /**
@@ -346,48 +251,5 @@ public class FileExtractor {
             }
         }
     }//printExtractedData
-
-    /**
-     * It makes transpose between cells for entire columns
-     */
-    public void transpose(Cell cellA, Cell cellB, int i, int j) {
-        int cellNumberA = Integer.parseInt(cellA.getStringCellValue().substring(9));
-        int cellNumberB = Integer.parseInt(cellB.getStringCellValue().substring(9));
-
-        if (cellNumberA > cellNumberB) {
-//                        System.out.println("Transposing N"+cellNumberA+" with "+cellNumberB);
-            String temp = cellA.getStringCellValue();
-            cellA.setCellValue(cellB.getStringCellValue());
-            cellB.setCellValue(temp);
-
-            //Also change the columns
-            for (int p = 1; p <= pProductList.size(); p++) {
-                row = sheet1.getRow(p);
-
-                // Ensure cells exist before accessing their values
-                Cell cellI = row.getCell(i);
-                Cell cellJ = row.getCell(j);
-
-                if (cellI == null && cellJ != null) {
-                    // Create cellI and copy value from cellJ
-                    cellI = row.createCell(i);
-                    cellI.setCellValue(cellJ.getNumericCellValue());
-                    cellJ.setCellValue(0); // Clear numeric value in cellJ
-                } else if (cellJ == null && cellI != null) {
-                    // Create cellJ and copy value from cellI
-                    cellJ = row.createCell(j);
-                    cellJ.setCellValue(cellI.getNumericCellValue());
-                    cellI.setCellValue(0); // Clear numeric value in cellI
-                } else if (cellI != null && cellJ != null) {
-                    // Swap values between cellI and cellJ
-                    double temp2 = cellI.getNumericCellValue();
-                    cellI.setCellValue(cellJ.getNumericCellValue());
-                    cellJ.setCellValue(temp2);
-                }
-                // If both cells are null, nothing to do for this row
-            }
-
-        }//if
-    }
 
 }//class

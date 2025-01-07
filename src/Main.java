@@ -18,7 +18,7 @@ public class Main {
         DummyData dummyData = new DummyData();
         //Initializing FileExtractor
         FileExtractor fileExtractor = new FileExtractor(dummyData.pProductList, dummyData.stockUnitsPerProduct, dummyData.stockUnitsPerBinType,
-                dummyData.nBinsPerBinType, "/home/alex/repos/extractedDataDemo.xlsx",true);
+                dummyData.nBinsPerBinType, "/home/alex/repos/extractedDataDemo.xlsx",false);
 //        fileExtractor.printExtractedData(); //Used for testing purposes
         fileExtractor.executeExtraction();
 
